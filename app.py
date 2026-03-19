@@ -169,8 +169,26 @@ if uploaded_files:
             draw_img.paste(overlay, (0,0), overlay)
 
         id_draw = ImageDraw.Draw(draw_img)
-        try: font = ImageFont.truetype("arial.ttf", size=38)
-        except: font = ImageFont.load_default()
+       # 수정 전
+# try: font = ImageFont.truetype("arial.ttf", size=38)
+# except: font = ImageFont.load_default()
+
+# 수정 후 (폰트 파일이 'arial.ttf'라는 이름으로 같은 폴더에 있을 때)
+import os
+
+# 폰트 파일 경로 설정 (현재 파일 위치 기준)
+font_path = os.path.join(os.path.dirname(__file__), "arial.ttf")
+
+try:
+    # 폰트 파일이 존재하면 해당 폰트를 사용
+    font = ImageFont.truetype(font_path, size=40) 
+except:
+    # 만약 파일이 없으면 크기 조절이 가능한 다른 무료 폰트를 로드하거나 다시 시도
+    # (리눅스 서버 기본 폰트 경로 예시 - 시스템마다 다를 수 있음)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size=40)
+    except:
+        font = ImageFont.load_default()
 
         for i, d in enumerate(st.session_state.devices):
             if d['floor_idx'] == f_idx:
