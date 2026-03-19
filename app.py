@@ -13,7 +13,6 @@ REQUIRED_NON_OVERLAP = 0.4
 DUPT_MARGIN = 1.1 
 
 def calculate_indoor_path_loss(distance_m):
-    """정확한 수학 모델 기반 패스 로스 계산"""
     if distance_m <= 1.0:
         return 20 * np.log10(max(distance_m, 0.1)) + 20 * np.log10(FREQUENCY_MHZ) - 27.55
     n = 3.5 
@@ -21,11 +20,9 @@ def calculate_indoor_path_loss(distance_m):
     return reference_loss_1m + 10 * n * np.log10(distance_m)
 
 def count_walls_px(start_pt, end_pt, wall_mask, step=10):
-    """샘플링 간격을 10px로 조정하여 속도와 정확도 균형 유지"""
     x0, y0, x1, y1 = int(start_pt[0]), int(start_pt[1]), int(end_pt[0]), int(end_pt[1])
     dist_px = np.sqrt((x1-x0)**2 + (y1-y0)**2)
     if dist_px < step: return 0
-    
     num_samples = max(int(dist_px / step), 2)
     xs = np.linspace(x0, x1, num_samples).astype(int)
     ys = np.linspace(y0, y1, num_samples).astype(int)
@@ -44,20 +41,22 @@ st.markdown("""
     <style>
     section[data-testid="stSidebar"] { width: 380px !important; }
     .dupt-box { padding: 12px; border-radius: 8px; border: 2px solid #3498db; background-color: #f0f2f6; }
+    .version-text { font-size: 0.8em; color: #888; text-align: right; margin-top: -10px; }
     </style>
 """, unsafe_allow_html=True)
 
-# 타이틀 변경 적용
 st.title("📡 Signal Repeater Designer")
 
 if 'devices' not in st.session_state: st.session_state.devices = []
 if 'last_click' not in st.session_state: st.session_state.last_click = {}
 
-# --- 3. Sidebar (설정 및 범위 유지) ---
+# --- 3. Sidebar ---
+st.sidebar.markdown("<div class='version-text'>Version 1.0</div>", unsafe_allow_html=True)
 st.sidebar.header("⚙️ RF & Environment")
+
 tx_eff = st.sidebar.slider("TX Power (dBm)", -10, 20, 5) 
 rp_eff = st.sidebar.slider("RP Power (dBm)", -10, 20, 10) 
-rx_sens = st.sidebar.number_input("RX Sensitivity (dBm)", value=-95) 
+rx_sens = st.sidebar.number_input("RX Sensitivity (dBm)", value=-105) 
 fade_margin = st.sidebar.slider("Fade Margin (dB)", 0, 20, 10) 
 required_rssi = rx_sens + fade_margin
 
@@ -70,15 +69,18 @@ st.sidebar.subheader("🕹️ Simulation Mode")
 mode = st.sidebar.radio("Mode:", ["Add TX", "Add RP", "Add RX", "Remove"])
 res_val = st.sidebar.select_slider("Resolution (Pixel Size)", options=[10, 15, 18, 20, 30], value=18)
 
-# --- Auto DUPT Calculation (로그 로직 유지) ---
+# --- DUPT Calculation Logic (Min 5s) ---
 rps = [d for d in st.session_state.devices if d['type'] == 'RP']
 if rps:
     st.sidebar.write("---")
     st.sidebar.subheader("🔧 RP TXDT Setup")
     for idx, d in enumerate(st.session_state.devices):
         if d['type'] == 'RP':
-            d['txdt'] = st.sidebar.radio(f"RP ID:{idx} TXDT", [0.5, 1.0, 1.5, 2.0], 
-                                         index=[0.5, 1.0, 1.5, 2.0].index(d.get('txdt', 0.5)), key=f"r_{idx}", horizontal=True)
+            # RP가 추가될 때 기본값 1.0s를 인덱스로 잡기 위해 수정
+            txdt_options = [0.5, 1.0, 1.5, 2.0]
+            current_txdt = d.get('txdt', 1.0)
+            d['txdt'] = st.sidebar.radio(f"RP ID:{idx} TXDT", txdt_options, 
+                                         index=txdt_options.index(current_txdt), key=f"r_{idx}", horizontal=True)
 
     px_to_m_ref = map_width_m / 1000 
     max_local_sum = 0
@@ -96,10 +98,10 @@ if rps:
     else:
         base_val = np.log10(max_local_sum) + 10.0
         
-    final_dupt = np.round(base_val * DUPT_MARGIN)
+    final_dupt = np.maximum(5.0, np.round(base_val * DUPT_MARGIN))
     st.sidebar.markdown(f"<div class='dupt-box'><b>Max Local Sum:</b> {max_local_sum:.1f}s<br><b>Auto DUPT:</b> <span style='color:#2980b9; font-size:1.3em; font-weight:bold;'>{int(final_dupt)}s</span></div>", unsafe_allow_html=True)
 
-# --- 신호세기 스펙트럼 가이드 ---
+# --- Signal Guide ---
 st.sidebar.write("---")
 st.sidebar.subheader("📊 Signal Guide")
 fig_leg, ax_leg = plt.subplots(figsize=(1.5, 4))
@@ -117,7 +119,7 @@ if st.sidebar.button("Clear All Devices"):
     st.session_state.devices = []
     st.rerun()
 
-# --- 4. Main Rendering Logic (정밀 픽셀 연산) ---
+# --- 4. Rendering Logic ---
 uploaded_files = st.file_uploader("Upload Floor Plans", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
 if uploaded_files:
@@ -138,7 +140,6 @@ if uploaded_files:
         if all_sources:
             overlay = Image.new('RGBA', (img_w, img_h), (0,0,0,0))
             ov_draw = ImageDraw.Draw(overlay)
-            
             for y in range(0, img_h, res_val):
                 for x in range(0, img_w, res_val):
                     max_rssi = -150.0
@@ -149,7 +150,6 @@ if uploaded_files:
                         rssi = pwr - calculate_indoor_path_loss(dm)
                         rssi -= (abs(f_idx-s['floor_idx']) * slab_loss_db)
                         rssi -= (count_walls_px((s['x'], s['y']), (x, y), mask) * wall_loss_sens)
-                        
                         if rssi > max_rssi: max_rssi = rssi
                         if s['type'] == 'RP' and rssi >= required_rssi: active_rps_txdt.append(s['txdt'])
 
@@ -160,14 +160,12 @@ if uploaded_files:
                                 for j in range(i+1, len(active_rps_txdt)):
                                     if abs(active_rps_txdt[i]-active_rps_txdt[j]) < REQUIRED_NON_OVERLAP:
                                         is_conflict = True; break
-                        
                         if is_conflict: color = (100, 100, 100, 180)
                         else:
                             norm = np.clip((max_rssi - rx_sens) / (max(tx_eff, rp_eff) - rx_sens + 10), 0, 1)
                             rgb = cm.jet(norm)
                             color = (int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255), 110)
                         ov_draw.rectangle([x, y, x+res_val, y+res_val], fill=color)
-            
             draw_img.paste(overlay, (0,0), overlay)
 
         id_draw = ImageDraw.Draw(draw_img)
@@ -176,18 +174,22 @@ if uploaded_files:
 
         for i, d in enumerate(st.session_state.devices):
             if d['floor_idx'] == f_idx:
-                clr = (255, 0, 0) if d['type'] == 'TX' else ((255, 165, 0) if d['type'] == 'RP' else (0, 0, 255))
+                clr = (255,0,0) if d['type']=='TX' else ((255,165,0) if d['type']=='RP' else (0,0,255))
                 id_draw.ellipse([d['x']-30, d['y']-30, d['x']+30, d['y']+30], fill=clr, outline="white", width=6)
-                label = f"ID:{i}\nTXDT:{d.get('txdt', 0.5)}s" if d['type'] == 'RP' else f"{d['type']}"
+                label = f"ID:{i}\nTXDT:{d.get('txdt', 1.0)}s" if d['type']=='RP' else f"{d['type']}"
                 id_draw.text((d['x']+45, d['y']-25), label, fill="white", stroke_fill="black", stroke_width=4, font=font)
 
         res_click = streamlit_image_coordinates(draw_img, width=1200, key=f"map_{f_idx}")
         if res_click and res_click != st.session_state.last_click.get(f_idx):
             st.session_state.last_click[f_idx] = res_click
             sc = img_w / 1200
-            cx, cy = res_click['x'] * sc, res_click['y'] * sc
+            cx, cy = res_click['x']*sc, res_click['y']*sc
             if mode == "Remove":
-                st.session_state.devices = [d for d in st.session_state.devices if not (d['floor_idx'] == f_idx and np.sqrt((d['x']-cx)**2 + (d['y']-cy)**2) < 60)]
+                st.session_state.devices = [d for d in st.session_state.devices if not (d['floor_idx']==f_idx and np.sqrt((d['x']-cx)**2+(d['y']-cy)**2)<60)]
             else:
-                st.session_state.devices.append({'type': mode.split()[1], 'x': cx, 'y': cy, 'floor_idx': f_idx, 'txdt': 0.5})
+                # [수정] 신규 장치 추가 시 RP인 경우 TXDT 기본값을 1.0으로 설정
+                new_device = {'type': mode.split()[1], 'x': cx, 'y': cy, 'floor_idx': f_idx}
+                if new_device['type'] == 'RP':
+                    new_device['txdt'] = 1.0
+                st.session_state.devices.append(new_device)
             st.rerun()
