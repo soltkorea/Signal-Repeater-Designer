@@ -3,3 +3,4 @@ numpy
 matplotlib
 pillow
 opencv-python-headless
+streamlit-image-coordinates
