@@ -69,14 +69,13 @@ st.sidebar.subheader("🕹️ Simulation Mode")
 mode = st.sidebar.radio("Mode:", ["Add TX", "Add RP", "Add RX", "Remove"])
 res_val = st.sidebar.select_slider("Resolution (Pixel Size)", options=[10, 15, 18, 20, 30], value=18)
 
-# --- DUPT Calculation Logic (Min 5s) ---
+# --- DUPT Calculation Logic (Min 5s & Log over 10s) ---
 rps = [d for d in st.session_state.devices if d['type'] == 'RP']
 if rps:
     st.sidebar.write("---")
     st.sidebar.subheader("🔧 RP TXDT Setup")
     for idx, d in enumerate(st.session_state.devices):
         if d['type'] == 'RP':
-            # RP가 추가될 때 기본값 1.0s를 인덱스로 잡기 위해 수정
             txdt_options = [0.5, 1.0, 1.5, 2.0]
             current_txdt = d.get('txdt', 1.0)
             d['txdt'] = st.sidebar.radio(f"RP ID:{idx} TXDT", txdt_options, 
@@ -119,7 +118,7 @@ if st.sidebar.button("Clear All Devices"):
     st.session_state.devices = []
     st.rerun()
 
-# --- 4. Rendering Logic ---
+# --- 4. Main Rendering Logic ---
 uploaded_files = st.file_uploader("Upload Floor Plans", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
 if uploaded_files:
@@ -168,33 +167,26 @@ if uploaded_files:
                         ov_draw.rectangle([x, y, x+res_val, y+res_val], fill=color)
             draw_img.paste(overlay, (0,0), overlay)
 
+        # 아이콘 및 텍스트 렌더링 (서버 환경 폰트 이슈 대응)
         id_draw = ImageDraw.Draw(draw_img)
-       # 수정 전
-# try: font = ImageFont.truetype("arial.ttf", size=38)
-# except: font = ImageFont.load_default()
-
-# 수정 후 (폰트 파일이 'arial.ttf'라는 이름으로 같은 폴더에 있을 때)
-import os
-
-# 폰트 파일 경로 설정 (현재 파일 위치 기준)
-font_path = os.path.join(os.path.dirname(__file__), "arial.ttf")
-
-try:
-    # 폰트 파일이 존재하면 해당 폰트를 사용
-    font = ImageFont.truetype(font_path, size=40) 
-except:
-    # 만약 파일이 없으면 크기 조절이 가능한 다른 무료 폰트를 로드하거나 다시 시도
-    # (리눅스 서버 기본 폰트 경로 예시 - 시스템마다 다를 수 있음)
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size=40)
-    except:
-        font = ImageFont.load_default()
+        f_size = 42 # 크게 표시하기 위해 42로 상향
+        try:
+            # 1. 폰트 로드 시도 (Arial)
+            font = ImageFont.truetype("arial.ttf", size=f_size)
+        except:
+            try:
+                # 2. 서버 기본 폰트 로드 (크기 지정 가능 여부 확인)
+                font = ImageFont.load_default(size=f_size)
+            except:
+                # 3. 최후의 수단
+                font = ImageFont.load_default()
 
         for i, d in enumerate(st.session_state.devices):
             if d['floor_idx'] == f_idx:
                 clr = (255,0,0) if d['type']=='TX' else ((255,165,0) if d['type']=='RP' else (0,0,255))
                 id_draw.ellipse([d['x']-30, d['y']-30, d['x']+30, d['y']+30], fill=clr, outline="white", width=6)
                 label = f"ID:{i}\nTXDT:{d.get('txdt', 1.0)}s" if d['type']=='RP' else f"{d['type']}"
+                # 텍스트가 겹치지 않도록 위치 조정 및 검은 테두리(Stroke) 추가로 가독성 확보
                 id_draw.text((d['x']+45, d['y']-25), label, fill="white", stroke_fill="black", stroke_width=4, font=font)
 
         res_click = streamlit_image_coordinates(draw_img, width=1200, key=f"map_{f_idx}")
@@ -205,7 +197,6 @@ except:
             if mode == "Remove":
                 st.session_state.devices = [d for d in st.session_state.devices if not (d['floor_idx']==f_idx and np.sqrt((d['x']-cx)**2+(d['y']-cy)**2)<60)]
             else:
-                # [수정] 신규 장치 추가 시 RP인 경우 TXDT 기본값을 1.0으로 설정
                 new_device = {'type': mode.split()[1], 'x': cx, 'y': cy, 'floor_idx': f_idx}
                 if new_device['type'] == 'RP':
                     new_device['txdt'] = 1.0
