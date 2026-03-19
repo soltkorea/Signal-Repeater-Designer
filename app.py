@@ -48,7 +48,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 타이틀 변경 적용
-st.title("📡 Repeater Designer")
+st.title("📡 Signal Repeater Designer")
 
 if 'devices' not in st.session_state: st.session_state.devices = []
 if 'last_click' not in st.session_state: st.session_state.last_click = {}
