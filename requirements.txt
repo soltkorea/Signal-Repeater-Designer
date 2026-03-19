@@ -1,6 +1,6 @@
 streamlit
 numpy
-matplotlib
-pillow
 opencv-python-headless
+Pillow>=9.2.0
 streamlit-image-coordinates
+matplotlib
