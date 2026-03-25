@@ -35,7 +35,7 @@ def count_walls_px(start_pt, end_pt, wall_mask, step=10):
     return wall_count
 
 # --- 2. Interface Setup ---
-st.set_page_config(layout="wide", page_title="Signal Repeater Designer")
+st.set_page_config(layout="wide", page_title="Repeater Placement Simulator")
 
 st.markdown("""
     <style>
@@ -45,7 +45,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📡 Signal Repeater Designer")
+st.title("📡 Repeater Placement Simulator")
 
 if 'devices' not in st.session_state: st.session_state.devices = []
 if 'last_click' not in st.session_state: st.session_state.last_click = {}
@@ -100,9 +100,9 @@ if rps:
     final_dupt = np.maximum(5.0, np.round(base_val * DUPT_MARGIN))
     st.sidebar.markdown(f"<div class='dupt-box'><b>Max Local Sum:</b> {max_local_sum:.1f}s<br><b>Auto DUPT:</b> <span style='color:#2980b9; font-size:1.3em; font-weight:bold;'>{int(final_dupt)}s</span></div>", unsafe_allow_html=True)
 
-# --- Signal Guide ---
+# ---  Guide ---
 st.sidebar.write("---")
-st.sidebar.subheader("📊 Signal Guide")
+st.sidebar.subheader("📊  Guide")
 fig_leg, ax_leg = plt.subplots(figsize=(1.5, 4))
 max_p = max(tx_eff, rp_eff)
 z_min = rx_sens - 15
